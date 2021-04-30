@@ -46,7 +46,7 @@
         - 127.0.0.1
         - ::1
         - localhost
-        - "*""
+        - "*"
     - name: Remove Test DB
       mysql_db: login_user=root login_password={{db_root_password}} login_unix_socket=/var/run/mysqld/mysqld.sock name=test state=absent
     - name: restart mysql
