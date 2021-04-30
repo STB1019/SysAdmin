@@ -1,0 +1,79 @@
+---
+- hosts: target
+  become: yes
+  vars:
+    path_src_config: /home/vagrant/playbooks/install_website/assets/main_site.conf
+    path_dst_config: /etc/nginx/sites-available/pr
+    path_dst_config_enabled: /etc/nginx/sites-enabled/pr
+    path_src_wp_config: /home/vagrant/playbooks/install_website/assets/wp-config.php
+    path_dst_wp_config: //var/www/pr/wp-config.php
+    path_web_hosting: //var/www
+    db_root_password: 123password!?
+    db_hostname: 192.168.123.123
+    db_host: localhost
+    db_name: db_pr
+    db_user: bot_pr
+    db_user_password: 123pass!?
+  tasks:
+    # Set database and  credential for user
+    - name: Create database
+      community.mysql.mysql_db:
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        login_host : "{{ db_host }}"
+        login_user: "root"
+        login_password: "{{ db_root_password }}"
+        name: "{{ db_name }}"
+        state: present
+    - name: Create database user with name 'db_user' and password 'db_user_password' with all database privileges only on 'db_name'
+      community.mysql.mysql_user:
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        login_host : "{{ db_host }}"
+        login_user: "root"
+        login_password: "{{ db_root_password }}"
+        name: "{{ db_user }}"
+        password: "{{ db_user_password }}"
+        priv: '{{ db_name }}.*:ALL,GRANT'
+        state: present
+    # Set Wordpress
+    - name: Restart php
+      systemd: 
+        name: php7.4-fpm
+        state: restarted
+    - name: Creates directory
+      file:
+        path: "{{path_web_hosting}}"
+        state: directory
+        owner:  www-data
+        group:  www-data
+    - name: decompress Wordpress
+      ansible.builtin.unarchive:
+        # creates: "{{path_web_hosting}}"
+        src: /tmp/pr
+        dest: "{{path_web_hosting}}"
+        remote_src: yes
+        owner: www-data
+        group:  www-data     
+    - name: Verify if exist wordpress folder
+      stat: path=/var/www/
+      register: wp_folder
+    - name: Rename wordpress into pr
+      command: mv /var/www/wordpress /var/www/pr
+      when: wp_folder.stat.exists
+    # Now is time to config wp
+    - name: Create wp-config.php 
+      ansible.builtin.copy:
+        src: "{{path_src_wp_config}}"
+        dest: /var/www/pr/wp-config.php
+        owner: www-data
+        group: www-data
+    # Activate site
+    - name: Activate the app
+      file: src="{{path_dst_config}}"
+            dest="{{path_dst_config_enabled}}"
+            state=link
+    # Restart NGINX
+    - name: restart nginx
+      become: true
+      systemd:
+        name: nginx
+        state: restarted

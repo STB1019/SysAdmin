@@ -1,0 +1,75 @@
+---
+- hosts: target
+  become: yes
+  vars:
+    path_src_config: /home/vagrant/playbooks/install_website/assets/main_site.conf
+    path_dst_config: /etc/nginx/sites-available/pr
+    path_web_hosting: /var/www/pr
+    db_root_password: 123password!?    
+    db_hostname: 192.168.123.123
+    db_host: localhost
+    db_name: db_pr
+    db_user: bot_pr
+    db_user_password: 123pass!?
+  tasks:
+    # Set NTP
+    - name: Is NTP service installed?
+      apt: name=ntp state=present
+    - name: Is NTP on running ?
+      service: name=ntp state=started enabled=yes
+    # Set PHP
+    - name: install php mod
+      become: true
+      apt: name="{{item}}"
+      loop:
+        - php-curl
+        - php-gd
+        - php-intl
+        - php-mbstring
+        - php-mysql
+        - php-soap
+        - php-xml
+        - php-xmlrpc
+        - php-zip
+        - php-fpm
+    # Install DB
+    - name: Install and running mysql
+      apt: name=mysql-server state=present
+    - name: run mysql
+      service: name=mysql state=started enabled=yes
+    # Set mysql secure installation
+    - name: Adds Python MySQL support on Debian/Ubuntu
+      apt: name=python3-pymysql state=present
+    - name: Sets the root password 
+      mysql_user: login_user=root login_password="" user=root host={{item}} password={{db_root_password}} login_unix_socket=/var/run/mysqld/mysqld.sock
+      with_items:
+        - 127.0.0.1
+        - ::1
+        - localhost
+        - "*""
+    - name: Remove Test DB
+      mysql_db: login_user=root login_password={{db_root_password}} login_unix_socket=/var/run/mysqld/mysqld.sock name=test state=absent
+    - name: restart mysql
+      service: name=mysql state=restarted enabled=yes
+    # Set NGINX
+    - name: Install Nginx
+      apt: name=nginx state=present
+    - name: Download Wordpress
+      get_url:
+        url: https://wordpress.org/latest.tar.gz
+        dest: /tmp/pr
+        mode: '0444'
+    - name: IS NGINX on running ?
+      service: name=nginx state=started enabled=yes
+    - name: Copy the config file for nginx
+      copy:
+        src: "{{ path_src_config }}"
+        dest: "{{ path_dst_config }}"
+        remote_src: yes
+        owner: root
+        group: root
+    - name: restart nginx
+      become: true
+      systemd:
+        name: nginx
+        state: restarted
